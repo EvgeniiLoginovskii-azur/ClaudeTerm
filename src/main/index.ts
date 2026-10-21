@@ -393,7 +393,7 @@ function bootstrap(): void {
   const openFromLaunch = (cmd: LaunchCommand): void => {
     if (cmd.kind === 'default') {
       if (tabs.list().length === 0) {
-        const t = openTab({ kind: 'shell', cwd: homedir() })
+        const t = openTab({ kind: 'shell', cwd: settings.defaultFolder ?? homedir() })
         autoTabId = t?.id ?? null
       }
       return

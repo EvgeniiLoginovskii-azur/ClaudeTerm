@@ -31,6 +31,7 @@ const api: CtApi = {
   playSound: () => ipcRenderer.send(IPC.settingsPlaySound),
   readClipboard: () => ipcRenderer.invoke(IPC.clipboardRead),
   writeClipboardText: (text) => ipcRenderer.send(IPC.clipboardWriteText, text),
+  saveClipboardImage: () => ipcRenderer.invoke(IPC.clipboardSaveImage),
   listImages: (tabId) => ipcRenderer.invoke(IPC.imagesList, tabId),
   markImagesSeen: (tabId) => ipcRenderer.send(IPC.imagesMarkSeen, tabId),
   imageAction: (cardId, action) => ipcRenderer.send(IPC.imagesAction, cardId, action),

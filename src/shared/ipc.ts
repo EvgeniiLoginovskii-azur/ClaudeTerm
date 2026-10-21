@@ -26,6 +26,7 @@ export const IPC = {
   settingsPlaySound: 'settings:play-sound',
   clipboardRead: 'clipboard:read',
   clipboardWriteText: 'clipboard:write-text',
+  clipboardSaveImage: 'clipboard:save-image',
   imagesList: 'images:list',
   imagesMarkSeen: 'images:mark-seen',
   imagesAction: 'images:action',
@@ -158,6 +159,8 @@ export interface CtApi {
   playSound(): void
   readClipboard(): Promise<ClipboardContent>
   writeClipboardText(text: string): void
+  /** saves the clipboard's image to a PNG file in the temp folder and answers its path; null when there is no image */
+  saveClipboardImage(): Promise<string | null>
   listImages(tabId: string): Promise<ImagesUpdate>
   markImagesSeen(tabId: string): void
   imageAction(cardId: string, action: ImageAction): void

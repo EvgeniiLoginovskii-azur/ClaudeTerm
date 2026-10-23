@@ -11,11 +11,12 @@ import type { OpenTabRequest, ProfileDef, RecentSession, SessionSummary, Setting
 import { AccountStore, accountLaunch, electronVault, nodeAccountFile } from './accounts'
 import { parseArgs, resolveLaunchDir, type LaunchCommand } from './args'
 import { Attention } from './attention'
+import { AutoContinue } from './auto-continue'
 import { autoUpdater } from 'electron-updater'
 import { writeClaudeTabFiles } from './claude-tab-settings'
 import { buildChildEnv } from './child-env'
 import { initDataDir, resolvePipeName } from './data-dir'
-import { isAbsPath, isAccountRef, isHash, isId, isIdList, isFlag, isImageAction, isLineNo, isOptionalTitle, isPanelWidth, isPtyData, isPtySize, isReviewScope, isSessionId, isUserInput } from './ipc-guards'
+import { isAbsPath, isAccountRef, isHash, isId, isIdList, isFlag, isImageAction, isLineNo, isOptionalTitle, isPanelWidth, isPromptInput, isPtyData, isPtySize, isReviewScope, isSessionId, isUserInput } from './ipc-guards'
 import { NOT_RUNNING } from '../shared/review'
 import { EditLedger } from './edit-ledger'
 import { launchEditor, nodeRevealDeps, revealInFolder, spawnDetached } from './editor-launch'
@@ -332,6 +333,7 @@ function bootstrap(): void {
       stopTabImages(tabId)
       stopTabStatus(tabId)
       attention.removeTab(tabId)
+      autoContinue.forget(tabId)
       review.removeTab(tabId)
     },
     spawn: spawnPty,
@@ -384,6 +386,8 @@ function bootstrap(): void {
     play: playSound,
     markTab: (tabId, reason) => send(IPC.evAttention, tabId, reason)
   })
+  // writes go to the PTY directly: what it types is not taken for the user's keys
+  const autoContinue = new AutoContinue({ enabled: () => settings.claude.autoContinue, write: (tabId, data) => tabs.write(tabId, data), log })
 
   const openTab = (req: OpenTabRequest, activate = true, setupToken = false): TabInfo | null => {
     try {
@@ -537,13 +541,19 @@ function bootstrap(): void {
       statusHub.sessionEnd(msg.tabId, msg.sessionId)
       // a late SessionEnd of the session before /clear leaves the new one running
       review.sessionEnded(msg.tabId, msg.sessionId)
+      // a continue still waiting would be typed into the shell
+      autoContinue.forget(msg.tabId)
       return { ok: true }
     },
     attention: (msg) => {
       if (!isClaudeTab(msg.tabId)) return { ok: false, error: `unknown claude tab: ${msg.tabId}` }
       // Send must never press Enter into a dialog; the end of a turn is a moment to look at the changes
-      if (msg.reason === 'done') review.turnEnded(msg.tabId)
-      else review.dialogOpened(msg.tabId, msg.agentId ?? null)
+      if (msg.reason === 'done') {
+        review.turnEnded(msg.tabId)
+        if (msg.error === undefined) autoContinue.turnEnded(msg.tabId)
+        // a response a dropped connection cut off goes on by itself: nobody needs to look yet
+        else if (autoContinue.failed(msg.tabId, msg.error)) return { ok: true }
+      } else review.dialogOpened(msg.tabId, msg.agentId ?? null)
       const signalled = attention.notify(msg.tabId, msg.reason)
       log.info(`attention ${msg.reason} tab=${msg.tabId}${msg.error ? ` error=${msg.error}` : ''}${signalled ? '' : ' (seen)'}`)
       return { ok: true }
@@ -551,6 +561,7 @@ function bootstrap(): void {
     turn: (msg) => {
       if (!isClaudeTab(msg.tabId)) return { ok: false, error: `unknown claude tab: ${msg.tabId}` }
       review.turn(msg.tabId, msg.sessionId)
+      autoContinue.turnStarted(msg.tabId)
       return { ok: true }
     },
     editBefore: (msg) => {
@@ -623,6 +634,8 @@ function bootstrap(): void {
   ipcMain.on(IPC.ptyWrite, (_e, id: unknown, data: unknown) => {
     if (!isId(id) || !isPtyData(data)) return
     if (id === autoTabId && isUserInput(data)) autoTabId = null
+    // scrolling through the reply with the mouse or PgUp is reading it, it puts nothing in the prompt
+    if (isPromptInput(data)) autoContinue.userInput(id)
     tabs.write(id, data)
   })
   ipcMain.on(IPC.ptyResize, (_e, id: unknown, cols: unknown, rows: unknown) => {

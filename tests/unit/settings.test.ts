@@ -24,6 +24,14 @@ describe('parseSettings', () => {
     expect(settings.imageWatch).toEqual(DEFAULT_SETTINGS.imageWatch)
   })
 
+  it('notifications.autoUnread is on unless turned off, and a value that is not a boolean falls back with a notice', () => {
+    expect(DEFAULT_SETTINGS.notifications.autoUnread).toBe(true)
+    expect(parseSettings(JSON.stringify({ notifications: { autoUnread: false } })).settings.notifications.autoUnread).toBe(false)
+    const r = parseSettings(JSON.stringify({ notifications: { autoUnread: 'no' } }))
+    expect(r.settings.notifications.autoUnread).toBe(true)
+    expect(r.errors.join('\n')).toContain('"notifications.autoUnread"')
+  })
+
   it('notifications: Even in front is off for every case unless turned on for one', () => {
     const n = parseSettings(JSON.stringify({ notifications: { done: { front: true } } })).settings.notifications
     expect([n.permission.front, n.question.front, n.done.front, n.bell.front]).toEqual([false, false, true, false])
@@ -57,6 +65,7 @@ describe('parseSettings', () => {
   it('notifications: defaults are the old behaviour, the bell rings no sound', () => {
     expect(DEFAULT_SETTINGS.notifications).toEqual({
       sound: 'system',
+      autoUnread: true,
       permission: { sound: true, flash: true, tab: true, front: false },
       question: { sound: true, flash: true, tab: true, front: false },
       done: { sound: true, flash: true, tab: true, front: false },
@@ -87,6 +96,7 @@ describe('parseSettings', () => {
     expect(off.errors).toEqual([])
     expect(off.settings.notifications).toEqual({
       sound: 'system',
+      autoUnread: true,
       permission: { sound: false, flash: false, tab: true, front: false },
       question: { sound: false, flash: false, tab: true, front: false },
       done: { sound: false, flash: false, tab: true, front: false },
@@ -242,6 +252,7 @@ describe('applySettingEdit', () => {
     expect(out.scrollback).toBe(5)
     expect(out.notifications).toEqual({
       sound: 'system',
+      autoUnread: true,
       permission: { sound: false, flash: false, tab: true, front: false },
       question: { sound: false, flash: false, tab: true, front: false },
       done: { sound: false, flash: false, tab: false, front: false },
